@@ -1,0 +1,73 @@
+#Path: PROJECT_DIRECTORY/.gitlab-ci.yml
+
+image: registry.gitlab.com/bisa_ai/msib/bisaai-group/bisa-design/bisa-design-website:latest
+
+stages:
+  - build
+  - deploy
+
+building:
+  stage: build
+  #services:
+  #  - mysql:latest
+  #variables:
+  #  MYSQL_DATABASE: project_name
+  #  MYSQL_ROOT_PASSWORD: secret
+  # This folder is cached between builds
+  # https://docs.gitlab.com/ee/ci/yaml/index.html#cache
+  script:
+    # Install & enable Xdebug for code coverage reports
+    - pecl install xdebug
+    - docker-php-ext-enable xdebug
+    # Install project dependencies.
+    - composer install
+    # Install Node dependencies.
+    # comment this out if you don't have a node dependency
+    #- npm install
+    # Copy over testing configuration.
+    #- cp .env.example .env
+    # Run npm build
+    # comment this out if you don't have a frontend build
+    # you can change this to to your frontend building script like
+    # npm run build
+    #- npm run dev
+    # Generate an application key. Re-cache.
+    #- php artisan config:cache
+    # Run database migrations.
+    #- php artisan migrate
+    # Run database seed
+    #- php artisan db:seed
+  cache:
+    paths:
+      - vendor/
+      - node_modules/
+
+#test:
+#  script:
+# run laravel tests
+#- php vendor/bin/phpunit --coverage-text --colors=never
+# run frontend tests
+# if you have any task for testing frontend
+# set it in your package.json script
+# comment this out if you don't have a frontend test
+#- npm test
+
+deployment:
+  stage: deploy
+  only:
+    - main
+    - master
+  script:
+    # Add the private SSH key to the build environment
+    - "which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )"
+    - eval $(ssh-agent -s)
+    - ssh-add <(echo "$SSH_PRIVATE_KEY")
+    - mkdir -p ~/.ssh
+    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\tPort 1022\n\n" > ~/.ssh/config'
+
+    # Run Envoy
+    - ~/.composer/vendor/bin/envoy run deploy --commit="$CI_COMMIT_SHA"
+  environment:
+    name: production
+    url: http://182.160.2.242:8090
+  when: manual
